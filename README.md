@@ -117,7 +117,7 @@ Render Cloud
      │
      │  pulls latest code, rebuilds Docker image
      ▼
-Live App — https://test-deployment-cfby.onrender.com
+Live App — https://deployement-pipeline.onrender.com/
 ```
 
 ### Why This Stack?
