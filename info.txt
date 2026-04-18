@@ -1,0 +1,25 @@
+#linkedin genrator agent 
+research agent -> this agent will seach the web for topics, concepts, statistics
+writer agent -> is goinf to inpit from the research and agent and write in a personality
+validator agent -> ensure accuracy, authentic, and has quality.
+
+
+Folder structure
+
+#add Docker in this folder -> what docker ? why docker 
+.
+└── Linkedin-generator/
+    ├── app.py
+    ├── gradio_app.py
+    ├── linkedin_generator.py
+    └── requirements.py
+
+
+.github
+    deploy.yml
+
+
+
+flask/fast api 
+uoload my code  (app.py -> data from backend -push friont end 
+froint end -0> back)-> git -> github actions -> render cloud
