@@ -94,20 +94,83 @@ docker run -p 7860:7860 \
 
 ---
 
-## Deployment (Render)
+## Deployment Architecture
 
-This project deploys automatically to [Render](https://render.com) via GitHub Actions.
+I wanted a deployment setup that was clean, automated, and didn't require me to manually trigger anything after a code push. Here's the architecture I landed on and why I made each decision.
 
-**Pipeline:**
+### The Pipeline
+
 ```
-git push to main → GitHub Actions → triggers Render deploy hook → Render rebuilds Docker image → live
+Local Machine
+     │
+     │  git push origin main
+     ▼
+GitHub Repository
+     │
+     │  triggers on push to main
+     ▼
+GitHub Actions (CI/CD)
+     │
+     │  curl POST to Render deploy hook
+     ▼
+Render Cloud
+     │
+     │  pulls latest code, rebuilds Docker image
+     ▼
+Live App — https://test-deployment-cfby.onrender.com
 ```
 
-**To set up:**
-1. Create a Web Service on Render and connect this repo
-2. Add `GEMINI_API_KEY` and `TAVILY_API_KEY` as environment variables on Render
-3. Copy the Deploy Hook URL from Render → Settings
-4. Add it as a GitHub secret named `RENDER_DEPLOY_HOOK_URL`
+### Why This Stack?
+
+**Docker** — I containerised the app so that the environment is consistent everywhere. Locally, in CI, and on Render it all runs the same. No more "works on my machine" issues. The `Dockerfile` uses `python:3.11-slim` to keep the image small and installs only what's in `requirements.txt`.
+
+**GitHub Actions** — Acts as the middle layer between my code and the deployment. Every push to `main` triggers the workflow in `.github/workflows/deploy.yml`. Right now it does one thing — fire the Render deploy hook — but this is where I'd add tests, linting, or any other checks before a deploy goes out.
+
+**Render** — I chose Render over alternatives because it natively supports Docker-based deployments with zero config. Point it at a repo, give it a `Dockerfile`, set your env vars, and it handles the rest. It also auto-assigns HTTPS and manages the port through the `PORT` environment variable, which the app reads at startup.
+
+**Deploy Hook** — Instead of giving GitHub Actions full Render API access, I use a scoped deploy hook URL. It's a single-purpose URL that only triggers a redeploy of this specific service. It lives as a GitHub Actions secret (`RENDER_DEPLOY_HOOK_URL`) so it's never exposed in the code or logs.
+
+### How the Pieces Connect
+
+1. I push code to the `main` branch on GitHub
+2. GitHub Actions picks it up immediately and runs `.github/workflows/deploy.yml`
+3. The workflow checks out the code, then fires a `curl POST` to the Render deploy hook URL
+4. Render receives the hook, pulls the latest code from GitHub, and rebuilds the Docker image from scratch
+5. Once the new container passes Render's health check, traffic switches over to it — zero downtime
+
+### Environment Variables
+
+Secrets never touch the codebase. `GEMINI_API_KEY` and `TAVILY_API_KEY` are set directly in the Render dashboard under Environment Variables. Render injects them at runtime into the container. Locally I use a `.env` file (which is in `.gitignore` and never committed).
+
+### Render Configuration
+
+The `render.yaml` file at the root tells Render exactly how to run the service:
+
+```yaml
+services:
+  - type: web
+    name: linkedin-generator
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+```
+
+`sync: false` means these values are managed manually in the Render dashboard and not synced from any external source — keeps secrets out of version control entirely.
+
+### Setting It Up From Scratch
+
+If you're forking this and want the same pipeline:
+
+1. **Create a Web Service on Render** — connect your GitHub repo, Render will detect the `Dockerfile` automatically
+2. **Add environment variables on Render** — `GEMINI_API_KEY` and `TAVILY_API_KEY` under Environment in your service settings
+3. **Get the Deploy Hook URL** — Render dashboard → your service → Settings → Deploy Hook → copy the URL
+4. **Add it as a GitHub secret** — repo → Settings → Secrets and variables → Actions → New secret → name it `RENDER_DEPLOY_HOOK_URL`, paste the URL
+5. **Push to main** — GitHub Actions will fire, hit the hook, and Render will deploy
 
 ---
 
